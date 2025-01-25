@@ -1,7 +1,19 @@
 {
-  "name": "tutorial",
+  "name": "astro-blog",
   "type": "module",
   "version": "0.0.1",
+  "description": "A personal blog built with Astro, sharing projects and coding insights.",
+  "author": "gominzip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gominzip/astro-blog"
+  },
+  "keywords": [
+    "astro",
+    "astrojs",
+    "astro-template",
+    "astro-blog"
+  ],
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
