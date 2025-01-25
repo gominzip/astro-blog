@@ -2,7 +2,15 @@
 import BlogPost from "@components/BlogPost.astro";
 import BaseLayout from "@layouts/BaseLayout.astro";
 import { getCollection } from "astro:content";
+
 const allPosts = await getCollection("blog");
+
+const sortedPosts = allPosts
+  .filter((post) => post.data.pubDate)
+  .sort(
+    (a, b) =>
+      new Date(b.data.pubDate).getTime() - new Date(a.data.pubDate).getTime(),
+  );
 
 const pageTitle = "Blog";
 ---
@@ -11,7 +19,7 @@ const pageTitle = "Blog";
   <h2>꾸준한 기록을 통해 지식공유의 장을 만들고자 합니다</h2>
   <ul>
     {
-      allPosts.map((post: any) => (
+      sortedPosts.map((post) => (
         <BlogPost url={`/posts/${post.id}/`} title={post.data.title} />
       ))
     }
