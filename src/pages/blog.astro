@@ -1,19 +1,19 @@
 ---
+import BlogPost from "@components/BlogPost.astro";
 import BaseLayout from "@layouts/BaseLayout.astro";
-const allPosts = Object.values(
-  import.meta.glob("./posts/*.md", { eager: true }),
-).reverse();
+import { getCollection } from "astro:content";
+const allPosts = await getCollection("blog");
 
 const pageTitle = "Blog";
 ---
 
 <BaseLayout pageTitle={pageTitle}>
   <h2>꾸준한 기록을 통해 지식공유의 장을 만들고자 합니다</h2>
-  {
-    allPosts.map((post: any) => (
-      <li>
-        <a href={post.url}>{post.frontmatter.title}</a>
-      </li>
-    ))
-  }
+  <ul>
+    {
+      allPosts.map((post: any) => (
+        <BlogPost url={`/posts/${post.id}/`} title={post.data.title} />
+      ))
+    }
+  </ul>
 </BaseLayout>

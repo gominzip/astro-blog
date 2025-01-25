@@ -1,5 +1,4 @@
 ---
-layout: ../../layouts/MarkdownPostLayout.astro
 title: "클로저는 환경을 어떻게 기억할까?"
 author: gominzip
 pubDate: 2025-01-05

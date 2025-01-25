@@ -1,5 +1,4 @@
 ---
-layout: ../../layouts/MarkdownPostLayout.astro
 title: "JS로 이해하는 프로토타입 기반 상속"
 author: gominzip
 pubDate: 2022-08-08

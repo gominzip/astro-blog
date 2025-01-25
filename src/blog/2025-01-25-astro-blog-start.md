@@ -1,5 +1,4 @@
 ---
-layout: ../../layouts/MarkdownPostLayout.astro
 title: "Astro 기술 블로그 개발기"
 author: gominzip
 pubDate: 2022-08-08
