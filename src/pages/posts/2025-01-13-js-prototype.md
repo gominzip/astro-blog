@@ -1,0 +1,476 @@
+---
+layout: ../../layouts/MarkdownPostLayout.astro
+title: "JS로 이해하는 프로토타입 기반 상속"
+author: gominzip
+pubDate: 2022-08-08
+description: "This post will show up on its own!"
+image:
+  url: "https://docs.astro.build/default-og-image.png"
+  alt: "The word astro against an illustration of planets and stars."
+tags: ["astro", "successes"]
+---
+
+> 📚 [모던 자바스크립트 Deep Dive](https://wikibook.co.kr/mjs/)의 19장을 학습하며 정리한 내용을 기반으로 작성되었습니다.
+
+평소 상속을 구현할 때 ES6 클래스를 주로 사용해왔다. 클래스 문법은 간단하게 상속을 구현할 수 있지만, 그 이면의 프로토타입 체인이 어떻게 동작하는지에 대한 이해가 부족하다고 느꼈다 🥲
+
+그래서 이번 학습을 통해 프로토타입 기반 상속에 대한 개념을 명확히 하고, 자바스크립트에서 상속과 객체 간의 관계를 더 잘 다룰 수 있는 방법을 익히고자 한다!
+
+---
+
+# 🧩 프로토타입(Prototype)의 기원
+
+들어가기 전, 개발자 임성묵님의 아티클 [**<자바스크립트는 왜 프로토타입을 선택했을까>**](https://medium.com/@limsungmook/%EC%9E%90%EB%B0%94%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8A%B8%EB%8A%94-%EC%99%9C-%ED%94%84%EB%A1%9C%ED%86%A0%ED%83%80%EC%9E%85%EC%9D%84-%EC%84%A0%ED%83%9D%ED%96%88%EC%9D%84%EA%B9%8C-997f985adb42)를 읽어보길 추천한다.
+
+해당 아티클은 철학적 접근을 통해 객체지향 프로그래밍의 근본적인 개념을 찾아보고, 자바스크립트가 프로토타입 모델을 선택한 이유를 철학적 관점에서 추측해볼 수 있게 한다.
+
+아티클의 내용을 아래 간단하게 정리해보았다.
+
+### 플라톤의 이데아론 (feat. 클래스)
+
+플라톤의 이데아는 **현실의 사물들이 추상적인 본질을 모방**한다는 개념이다.
+영어에서 "chair"는 이데아의 의자를, "a chair"는 현실의 의자를 가리키듯, **객체지향 프로그래밍에서 클래스는 추상적인 개념을 표현하며, 인스턴스는 실제 존재하는 객체를 나타낸다**. 이 사고방식은 Java나 C#과 같은 클래스 기반 언어에 녹아 있다.
+
+플라톤의 이데아 이론은 아리스토텔레스에 의해 **'분류(classification)'** 개념으로 발전되었으며, 이는 객체지향 프로그래밍에서 클래스가 속성에 따라 객체를 그룹화하는 방식인 **일반화(generalization)**과 대응된다.
+
+### 비트겐슈타인과 프로토타입
+
+19세기 유명 철학자 비트겐슈타인은 위의 전통적인 분류 방식을 비판하며, 개념을 정의하는 데 있어서 공통 속성만으로는 설명할 수 없다고 주장했다.
+
+비트겐슈타인은 **'가족 유사성' 개념을 통해 개체들 간의 공유되는 속성이 없더라도 그들 간의 유사성으로 분류할 수 있다**고 설명했으며, **'의미사용이론'**을 제시하며 **단어의 의미는 고정된 본래의 의미가 아니라 그 사용 맥락(Context)에 따라 결정된다고 주장**했다.
+
+### Rosch 의 프로토타입 이론
+
+비트겐슈타인의 이론들은 1970년경 철학자 Eleanor Rosch 에 의해 프로토타입 이론으로 정리된다.
+
+- 객체는 ‘정의’로부터 분류되는 것이 아니라 **가장 좋은 보기로부터 범주화**된다는 이론이다.
+- 현실에 존재하는 것 중 **가장 좋은 본보기를 원형(prototype)으로 선택**한다.
+- **문맥(Context)**에 따라 ‘범주’, 즉 ‘의미’가 달라진다.
+
+위와 같은 이론은 그대로 프로토타입 기반 객체지향 프로그래밍을 통해 구현되었다.
+예를 들어 "Context에 따라 의미가 달라진다"는 부분은 JS의 실행 컨텍스트, 스코프 체인, 클로저, this, 호이스팅 등에서 확인할 수 있다. (하나같이 머리가 아픈 개념들...)
+
+기원을 알아봤으니 이제 본격적으로 자바스크립트에서 프로토타입이 어떻게 구현되었는지 알아보자!
+
+---
+
+# 🤝 자바스크립트의 프로토타입을 통한 상속
+
+> 자바스크립트는 **프로토타입**을 기반으로 상속을 구현한다.
+
+JS에서 객체를 생성할 때, 객체 리터럴로 생성을 하다보면 여러 객체를 찍어내는데에 어려움을 겪게 된다. 따라서 생성자 함수를 통해 여러 객체를 효율적으로 생성하고 공통된 속성과 메서드를 공유할 수 있도록 돕는다.
+
+아래는 생성자 함수의 예시이다.
+
+```js
+function Student(name) {
+  this.name = name;
+  this.introduce = function () {
+    return `My name is ${this.name}`;
+  };
+}
+
+const student1 = new Student("minji");
+const student2 = new Student("suyoung");
+
+console.log(student1.introduce === student2.introduce); // false
+
+console.log(student1.introduce()); // My name is minji
+console.log(student2.introduce()); // My name is suyoung
+```
+
+위 예제의 문제는 introduce가 동일한 내용의 메서드임에도 인스턴스가 생성될 때마다 메서드도 중복해서 생성이 된다는 것이다.
+이때 상속을 통해 불필요한 중복을 제거할 수 있고, 자바스크립트는 프로토타입을 기반으로 상속을 구현한다.
+
+```js
+function Student(name) {
+  this.name = name;
+  // Student의 모든 인스턴스가 introduce 메서드를 공유해서 사용할 수 있다.
+  Student.prototype.introduce = function () {
+    return `My name is ${this.name}`;
+  };
+}
+
+const student1 = new Student("minji");
+const student2 = new Student("suyoung");
+
+console.log(student1.introduce === student2.introduce); // true
+
+console.log(student1.introduce()); // My name is minji
+console.log(student2.introduce()); // My name is suyoung
+```
+
+---
+
+# 🤔 프로토타입 객체
+
+위의 예제처럼 **프로토타입은 어떤 객체의 상위(부모) 객체의 역할을 하는 객체로서 다른 객체의 공유 프로퍼티를 제공**한다.
+
+프로토타입은 객체 생성 방식에 따라 결정되며, 결정된 프로토타입에 대한 참조(null도 가능)는 객체의 **[[Prototype]]**이라는 내부슬롯에 저장된다.
+
+모든 객체는 하나의 프로토타입을 가지며, 모든 프로토타입은 생성자 함수와 연결되어 있다.
+![](https://velog.velcdn.com/images/gominzip/post/13ef87e8-86b0-40f7-80af-c026b0f48847/image.png)
+
+| 객체의 프로퍼티                                                                                   |
+| ------------------------------------------------------------------------------------------------- |
+| ![](https://velog.velcdn.com/images/gominzip/post/125b1ba8-94b1-4398-b47c-3974cafd7f59/image.png) |
+
+객체를 출력해보면 내부 슬롯 [[Prototype]]을 확인할 수 있다. [[Prototype]] 내부 슬롯에 직접 접근을 불가능하지만, `__proto__`접근자 프로퍼티를 통해 간접적으로 접근이 가능하다.
+또한 프로토타입은 자신의 constructor 프로퍼티로 생성자 함수에 접근할 수 있고, 생성자 함수는 자신의 prototype 프로퍼티로 프로토타입에 접근할 수 있다.
+
+## `__proto__` 접근자 프로퍼티
+
+![](https://velog.velcdn.com/images/gominzip/post/67cbc96f-5c22-4929-be50-1b7c8ea9fbe9/image.png)
+
+`__proto__`접근자 프로퍼티는 위처럼 getter/setter 접근자 함수를 통해 프로토타입을 취득하거나 할당할 수 있다.
+
+이때 `__proto__` 접근자 프로퍼티는 생성된 각 객체가 직접 소유하는 프로퍼티가 아닌 Object.prototype의 프로퍼티이며, 모든 객체는 상속을 통해 `Object.prototype.__proto__`를 사용할 수 있는 것이다.
+
+### 왜 접근자 프로퍼티를 통해서 접근해야 할까?
+
+```js
+const parent = {};
+const child = {};
+
+child.__proto__ = parent;
+parent.__proto__ = child; // TypeError: Cyclic __proto__ value
+```
+
+접근자 프로퍼티를 프로토타입에 접근 가능하도록 하는 이유는, 위의 예제와 같이 상호 참조로 인해 비정상적인 프로토타입 체인이 생성되는 것을 방지하고, 이를 에러로 처리하기 위해서이다.
+정상적인 프로토타입 체인은 **단방향 링크드 리스트**로 구현되어야 한다.
+
+### 직접 사용을 권장하지 않는 이유
+
+```js
+const obj = Object.create(null);
+
+console.log(obj.__proto__); // undefined
+console.log(Object.getPrototypeOf(obj)); // null
+```
+
+위와 같이 프로토타입을 상속받지 않는 객체에 대해서는 `__proto__`접근자 프로퍼티를 사용할 수 없는 경우가 있으며, 객체를 어지럽힐 수 있는 위험이 있다.
+따라서 프로토타입의 취득이나 교체에는`Object.getPrototypeOf`와 `Object.setPrototypeOf` 메서드 사용을 권장한다.
+
+## 함수 객체의 `prototype` 프로퍼티
+
+일반 객체와 달리 **함수 객체는 prototype이라는 프로퍼티를 가지며 이는 생성자 함수가 생성할 인스턴스의 프로토타입을 가리킨다.**
+이때 non-constructor인 화살표 함수와 메서드는 해당 프로퍼티를 소유하지 않으며 프로토타입도 생성하지 않는다.
+
+| 구분                       | 소유        | 값                | 사용 주체   | 사용 목적                                                          |
+| -------------------------- | ----------- | ----------------- | ----------- | ------------------------------------------------------------------ |
+| `__proto__`접근자 프로퍼티 | 모든 객체   | 프로토타입의 참조 | 모든 객체   | 객체가 자신의 프로토타입에 접근 또는 교체하기 위해 사용            |
+| `prototype` 프로퍼티       | constructor | 프로토타입의 참조 | 생성자 함수 | 생성자 함수가 자신이 생성할 객체의 프로토타입을 할당하기 위해 사용 |
+
+![](https://velog.velcdn.com/images/gominzip/post/5a8ceec9-0e52-4176-92a7-7785d6b5644d/image.png)
+
+결과적으로 두 프로퍼티는 동일한 프로토타입을 가리킨다.
+
+## 프로토타입의 생성 시점
+
+**프로토타입과 생성자 함수는 언제나 쌍으로 존재하기 때문에, 프로토타입은 생성자 함수가 생성되는 시점에 더불어서 생성된다. **
+
+### 사용자 정의 생성자 함수
+
+내부 메서드 [[Constuct]]를 갖는 함수, 즉 **constructor는 함수 정의가 평가되어 함수 객체를 생성하는 시점에 프로토타입도 더불어 생성**된다. (함수 정의의 평가 시점은 [이전 포스팅의 실행 컨텍스트](https://velog.io/@gominzip/%ED%81%B4%EB%A1%9C%EC%A0%80%EB%8A%94-%ED%99%98%EA%B2%BD%EC%9D%84-%EC%96%B4%EB%96%BB%EA%B2%8C-%EA%B8%B0%EC%96%B5%ED%95%A0%EA%B9%8C)를 참고하자!)
+
+### 빌트인 생성자 함수
+
+Object, String, Number, Function, Array, RefExp, Date, Promise 등과 같은 빌트인 생성자 함수도 일반 함수와 마찬가지로 빌트인 생성자 함수가 생성되는 시점, 즉 **전역 객체가 생성되는 시점에 생성**된다.
+
+## 객체 생성 방식과 프로토타입의 결정
+
+객체는 다양한 방식으로 생성된다.
+
+- 객체 리터럴
+- Object 생성자 함수
+- 생성자 함수
+- Object.create 메서드
+- 클래스(ES6)
+
+각 방식마다 세부적인 차이는 있으나 추상 연상 **OrdinaryObjectCreate**에 의해 생성된다는 공통점이 있다.
+
+추상 연산 OrdinaryObjectCreate는 생성할 객체의 프로토타입을 필수적으로 받아 [[Prototype]] 내부 슬롯에 추가하고, 옵션으로 받은 프로퍼티 목록까지 추가해 객체를 반환한다.
+따라서 프로토타입은 OrdinaryObjectCreate의 인수에 의해 결정되며, 이 인수는 객체가 생성되는 시점에 객체 생성 방식에 의해 결정된다.
+
+### 1. 객체 리터럴
+
+JS 엔진은 객체 리터럴을 평가해 객체를 생성할 때 추상 연산 OrdinaryObjectCreate의 프로토타입 인자로 `Object.prototype`을 전달한다.
+
+```js
+const obj = { x: 1 };
+
+console.log(obj.constuctor === Object); // true
+console.log(obj.hasOwnProperty("x")); // true
+```
+
+obj는 직접 소유하지 않았지만 프로토타입인 **Object.prototype 객체**의 프로퍼티와 메서드를 상속받아 자신의 자산처럼 자유롭게 사용 가능하다.
+
+### 2. Object 생성자 함수
+
+Object 생성자 함수도 객체 리터럴과 동일하게 **Object.prototype 객체**를 상속받게 된다.
+
+```js
+const obj = new Object();
+obj.x = 1;
+
+console.log(obj.constuctor === Object); // true
+console.log(obj.hasOwnProperty("x")); // true
+```
+
+Object 생성자 함수의 경우에는 일단 빈 객체를 생성 후 프로퍼티를 추가한다는 점에서 객체 리터럴과 차이가 있다.
+
+### 3. 생성자 함수
+
+생성자 함수에서 추상 연산 OrdinaryObjectCreate에 전달되는 프로토타입은 **생성자 함수의 `prototype 프로퍼티`에 바인딩되어 있는 객체**다. (위에서 알아본 prototype 프로퍼티)
+
+기본적으로 Person.prototype의 프로퍼티는 constuctor뿐이며, 프로토타입 역시 객체이므로 프로퍼티를 추가/삭제할 수 있다.
+
+```js
+function Person(name) {
+  this.name = name;
+}
+
+Person.prototype.sayHello = function () {
+  console.log(`Hi! My name is ${this.name}`);
+};
+
+const me = new Person("Lee");
+const you = new Person("Kim");
+
+me.sayHello(); // Hi! My name is Lee
+you.sayHello(); // Hi! My name is Kim
+```
+
+추가/삭제된 프로퍼티는 프로토타입 체인에 즉각 반영된다.
+
+---
+
+# 🧬 프로토타입 체인
+
+위의 예제에서 me 객체를 살펴보자.
+![](https://velog.velcdn.com/images/gominzip/post/7d189428-1cf0-4ee3-9a79-75c946825fe9/image.png)
+
+me 객체의 프로토타입은 Person.prototype이고, Person.prototype의 프로토타입은 Object.prototype임을 확인 할 수 있다.
+![](https://velog.velcdn.com/images/gominzip/post/61631535-3ae1-4c2e-8776-1e6a689ffa04/image.png)
+
+이처럼 JS는 객체의 프로퍼티에 접근하려 할 때 해당 객체에 접근하려는 프로퍼티가 없다면 [[Prototype]] 내부 슬롯의 참조를 따라 상위 프로토타입의 프로퍼티를 순차적으로 검색하며 이를 **프로토타입 체인**이라 한다.
+
+이때 프로토타입 프로퍼티를 변경/삭제하려면 하위 객체를 통해 프로토타입 체인으로 접근하는 것이 아니라 프로토타입에 직접 접근해야 한다.
+
+프로토타입 체인의 최상위에 위치하는 객체는 언제나 Object.prototype이다.**(프로토타입의 종점)**
+
+### 스코프 체인과 프로토타입 체인
+
+프로토타입 체인은 **상속과 프로퍼티 검색**을 위한 메커니즘이고, 스코프 체인은 **식별자 검색을 위한 메커니즘**이다.
+
+```js
+me.hasOwnProperty("name");
+```
+
+1. 먼저 스코프 체인에서 me 식별자를 검색한다.
+2. 전역에서 선언되었으므로 전역 스코프에서 검색된다.
+3. me 객체의 프로토타입 체인에서 hasOwnProperty 메서드를 검색한다.
+4. Object.prototype 객체의 프로퍼티로 hasOwnProperty가 검색된다.
+
+이처럼 **스코프 체인과 프로토타입 체인은 서로 협력하여 식별자와 프로퍼티를 검색하는 데 사용된다.**
+
+## 오버라이딩과 프로퍼티 섀도잉
+
+프로토타입 프로퍼티와 같은 이름의 프로퍼티를 인스턴스에 추가하면 프로토타입 체인을 따라 프로퍼티를 검색해 프로토타입 프로퍼티를 덮어쓰는 것이 아니라 인스턴스 프로퍼티로 추가한다 (프로토타입의 메서드를 인스턴스 메서드로 **오버라이딩**).
+
+이처럼 상속 관계에 의해 프로퍼티가 가려지는 현상을 **프로퍼티 섀도잉**이라 한다.
+
+## instanceof 연산자
+
+```js
+객체 instanceof 생성자 함수
+```
+
+instanseof 연산자의 경우, 우변의 **생성자 함수의 prototype에 바인딩된 객체가 좌변의 객체의 프로토타입 체인 상에 존재**하면 true, 그렇지 않은 경우엔 false로 평가된다.
+
+```js
+function Person(name) {
+  this.name = name;
+}
+
+const me = new Person("Lee");
+
+const parent = {};
+
+Object.setPrototypeOf(me, parent); // 프로토타입 교체
+
+// Person.prototype이 me 객체의 프로토타입 체인 상에 존재하지 않으므로 false
+console.log(me instanceof Person); // false
+
+// 생성자 함수의 prototype 프로퍼티에 parent 객체 바인딩
+Person.prototype = parent;
+
+console.log(me instanceof Person); // true
+```
+
+위처럼 프로토타입의 constructor 프로퍼티가 가리키는 생성자 함수를 찾는 것이 아닌, **생성자 함수의 prototype 프로퍼티가 가리키는 객체가 프로토타입 체인 상에 존재하는지 확인**한다.
+
+instanceof 연산자를 다음과 같이 구현해볼 수 있다.
+
+```js
+function isInstanceof(instance, constructor) {
+  const prototype = Object.getPrototypeOf(instance);
+
+  // 재귀 탈출 조건, prototype이 null이면 종점
+  if (prototype === null) return false;
+
+  // 프로토타입이 생성자 prototype 프로퍼티에 바인딩된 객체면 true
+  // 아니라면 재귀로 프로토타입 체인 상의 상위 프로토타입으로 이동해 확인
+  return (
+    prototype === constructor.prototype || isInstanceof(instance, constructor)
+  );
+}
+```
+
+## 프로퍼티 열거
+
+객체의 모든 프로퍼티를 순회하며 열거(enumeration)하려면 **for..in문**을 사용한다.
+for..in문은 **객체의 프로토타입 체인 상에 존재하는 모든 프로토타입의 프로퍼티 중에서 프로퍼티 어트리뷰트 [[Enumerable]]의 값이 true인 프로퍼티를 순회하며 열거**한다.
+
+```js
+function Parent() {
+  this.parentProp = "I am parent";
+}
+Parent.prototype.inheritedProp = "I am inherited";
+
+const child = new Parent();
+child.childProp = "I am child";
+
+for (const key in child) {
+  console.log(key); // parentProp, childProp, inheritedProp 출력
+}
+
+// `enumerable` 속성 변경
+Object.defineProperty(Parent.prototype, "inheritedProp", {
+  enumerable: false, // 열거 불가능하도록 설정
+});
+
+for (const key in child) {
+  console.log(key); // parentProp, childProp만 출력
+}
+```
+
+---
+
+# ⭐️ ES6의 클래스는 프로토타입과 어떻게 다를까?
+
+자바스크립트는 프로토타입 기반의 객체 지향 언어로, ES5에서는 클래스 없이도 생성자 함수와 프로토타입을 활용해 객체 지향 프로그래밍에서의 상속을 구현할 수 있었다. 그러나 클래스 기반 언어에 익숙한 개발자들에게는 프로토타입 기반 프로그래밍 방식이 다소 어렵게 느껴질 수 있었고, 이러한 이유로 ES6에서 클래스가 도입되었다.
+
+클래스는 **함수**이며, 기존의 프로토타입 기반 패턴을 클래스 기반 패턴처럼 사용할 수 있도록 만든 **문법적 설탕(Syntactic Sugar)**이라 생각할 수 있다. 즉, 내부적으로는 프로토타입을 활용한 동작 방식을 유지하지만, 보다 직관적이고 명확한 문법을 제공하여 코드 가독성을 높인다.
+
+클래스와 생성자 함수 모두 프로토타입 기반으로 인스턴스를 생성하지만, 클래스는 생성자 함수에 비해 더 엄격한 규칙을 가지며, 생성자 함수에서는 제공되지 않는 추가적인 기능도 제공한다.
+
+### 클래스와 생성자 함수의 차이
+
+1. 클래스는 항상 **`new`** 연산자와 함께 호출해야 한다. 하지만 생성자 함수는 `new` 연산자가 없을 경우 일반 함수로서 호출된다.
+   ```javascript
+   class MyClass {
+     constructor(name) {
+       this.name = name;
+     }
+   }
+   const instance = MyClass("John"); // TypeError: Class constructor MyClass cannot be invoked without 'new'
+   ```
+2. 클래스는 상속을 지원하는 `extends`와 `super` 키워드를 제공한다.
+3. 클래스는 **호이스팅이 발생하지 않는 것처럼 동작**한다. 하지만 함수 선언문으로 정의된 생성자 함수는 함수 호이스팅이, 함수 표현식으로 정의된 생성자 함수는 변수 호이스팅이 발생한다.
+
+   ```javascript
+   const obj1 = new MyClass(); // ReferenceError: Cannot access 'MyClass' before initialization
+   class MyClass {}
+
+   const obj2 = new MyConstructor(); // 작동
+   function MyConstructor() {}
+   ```
+
+4. 클래스 내의 모든 코드는 암묵적으로 **strict mode**가 지정되어 실행되며 해제할 수 없다. 생성자 함수는 암묵적으로 strict mode가 지정되지 않는다.
+
+5. 클래스의 메서드는 `prototype`에 자동으로 추가된다. 생성자 함수에서 메서드를 정의하려면 명시적으로 `prototype`에 추가해야 한다.
+
+   ```javascript
+   // 클래스
+   class MyClass {
+     greet() {
+       console.log("Hello!");
+     }
+   }
+   console.log(MyClass.prototype.greet); // [Function: greet]
+
+   // 생성자 함수
+   function MyConstructor() {}
+   MyConstructor.prototype.greet = function () {
+     console.log("Hello!");
+   };
+   console.log(MyConstructor.prototype.greet); // [Function]
+   ```
+
+6. 클래스의 constructor, 프로토타입 메서드, 정적 메서드는 모두 프로퍼티 어트리뷰트 [[Enumerable]]의 값이 false다. 즉, 열거되지 않는다.
+
+위의 차이점들을 확인해보면 클래스를 프로토타입 기반 객체 생성 패턴의 단순한 문법적 설탕이라고 보기보다는 **새로운 객체 생성 매커니즘**으로 보는 것이 좀 더 합당할 것이다!
+
+---
+
+# 연습해보기
+
+이번 글에서 학습한 프로토타입과 프로토타입 체인을 예제로 다시한번 이해해보자.
+
+```js
+function Animal(name) {
+  this.name = name;
+}
+
+Animal.prototype.sayHello = function () {
+  return `Hello, I am ${this.name}!`;
+};
+
+function Dog(name, breed) {
+  Animal.call(this, name);
+  this.breed = breed;
+}
+
+Dog.prototype = Object.create(Animal.prototype); // Dog의 프로토타입을 Animal의 프로토타입으로 설정
+Dog.prototype.constructor = Dog; // constructor 속성 복원
+
+var dog1 = new Dog("Buddy", "Bulldog");
+var dog2 = new Dog("Max", "Beagle");
+
+dog1.sayHello = function () {
+  return `Woof! I'm ${this.name}, a ${this.breed}!`;
+};
+
+console.log(dog1.sayHello()); // 'Woof! I'm Buddy, a Bulldog!'
+console.log(dog2.sayHello()); // 'Hello, I am Max!'
+```
+
+- 왜 `dog1.sayHello()`와 `dog2.sayHello()`의 출력값이 다를까?
+  ![](https://velog.velcdn.com/images/gominzip/post/50dd56be-b07c-4f77-b2b4-e97e05a2178a/image.png)
+  - 직접 프로토타입 체인을 그려보면 쉽게 이해할 수 있다. `dog1`은 인스턴스에서 `sayHello` 메서드를 오버라이딩했기 때문에, `Animal.prototype.sayHello`의 프로퍼티가 섀도잉된다. 즉, `dog1`은 자신의 인스턴스에서 정의된 `sayHello`를 호출한다. 반면에 `dog2`는 프로토타입 체인을 따라 `Animal.prototype.sayHello`를 호출하게 된다.
+
+```js
+function Dish() {}
+
+Dish.prototype.name = "Spaghetti";
+Dish.prototype.price = 8000;
+
+var dish1 = new Dish();
+var dish2 = new Dish();
+
+dish1.price = 7000;
+console.log(dish2.price); // 8000
+```
+
+- 왜 `dish1.price;`으로 프로퍼티 값이 바뀌지 않을까?
+  - 프로토타입의 프로퍼티를 변경/삭제하려면 하위 객체를 통해 프로토타입 체인으로 접근하는 것이 아니라 프로토타입에 직접 접근해야 한다.
+    ex) `dish1.__proto__.price = 7000;`
+
+---
+
+## 마치며 💭
+
+**"자바스크립트는 프로토타입 기반의 언어이다."**라는 말은 그저 암기하듯이 이해해왔던 것 같다. 하지만 이번 학습을 통해 스스로 프로토타입 체인을 그려볼 수 있었고, 프로토타입의 철학적 기원을 배우면서 단순히 키워드를 학습하는 것이 아닌 자바스크립트의 디자인 철학을 엿볼 수 있었다!
+
+분량 문제로 일반적인 생성자 함수와 클래스를 비교하는 정도로 마무리했지만, 향후 포스팅에서는 클래스에서 프로토타입이 어떻게 작용하는지 좀 더 깊이 있게 다뤄볼 예정이다🔥
